@@ -32,7 +32,15 @@ RUN apk add --no-cache \
     && docker-php-ext-install opcache
 
 # Copy and use official production php.ini settings
-RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+COPY setup/php/php.ini /usr/local/etc/php/php.ini
+# RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+
+##### move fpm configuration files #######
+# fpm master process configuration file
+# COPY setup/fpm/php-fpm.conf /usr/local/etc/php-fpm.conf
+
+# fpm pool children configuration file 
+COPY setup/fpm/www.conf /usr/local/etc/php-fpm.d/www.conf
 
 # Configure Opcache for production-level response performance
 RUN { \
@@ -57,7 +65,6 @@ RUN chown -R www-data:www-data /var/www/html
 # Run container as the secure www-data user
 USER www-data
 
-# Expose port 9123 matching FPM listener
 EXPOSE 9000
 
 CMD ["php-fpm"]
