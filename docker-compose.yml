@@ -4,34 +4,26 @@ services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.frank
     user: "root"
+    ports:
+      - "8080:80"
+      - "443:443"
+      - "443:443/udp" # Required for HTTP/3 speeds
     volumes:
       - .:/var/www/html
     networks:
       - app-network
+    environment:
+      - SERVER_NAME=localhost
+      - MAX_REQUESTS=2000
+    restart: unless-stopped
     deploy:
       resources:
         limits:
           cpus: '2.0'
           memory: 1G
 
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "8080:80"
-    volumes:
-      - .:/var/www/html
-      - ./setup/nginx/docker.conf:/etc/nginx/conf.d/default.conf
-    depends_on:
-      - app
-    networks:
-      - app-network
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 512M
 
 networks:
   app-network:

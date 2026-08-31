@@ -1,0 +1,21 @@
+{
+    # Enable FrankenPHP global options
+    frankenphp
+    
+    # Configure the worker mode loop execution
+    order php_server before file_server
+}
+
+localhost {
+    # Point to your public directory
+    root * /var/www/html/public
+    encode zstd gzip
+
+    # Execute your application in worker mode
+    # Arguments: <path-to-script> <number-of-workers>
+    frankenphp_define_worker /var/www/html/public/index.php 4
+
+    # Fallback to standard php serving or static files if not caught by worker
+    php_server
+    file_server
+}

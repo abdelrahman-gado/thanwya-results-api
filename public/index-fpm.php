@@ -52,22 +52,4 @@ $app->get('/results', function (Request $request, Response $response) use ($cont
     return $response->withHeader('Content-Type', 'application/json');
 });
 
-
-// Define the worker execution loop (FrankenPHP specific code)
-$maxRequests = (int) ($_ENV['MAX_REQUESTS'] ?? 1000);
-for ($nbRequests = 0; $nbRequests < $maxRequests; ++$nbRequests) {
-    // frankenphp_handle_request returns true when a request is intercepted
-    $keepRunning = frankenphp_handle_request(function () use ($app) {
-        // Run the Slim app instance for the current request
-        $app->run();
-    });
-
-    if (!$keepRunning) {
-        break;
-    }
-
-    // Optional: Call garbage collection periodically to prevent leaks
-    if ($nbRequests % 100 === 0) {
-        gc_collect_cycles();
-    }
-}
+$app->run();

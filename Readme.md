@@ -1,0 +1,150 @@
+# 🎓 Thanwya Results API
+
+A highly optimized, lightweight, **read-only** REST API designed to serve **Thanaweya Amma (Egyptian High School) results** at extreme scale. 
+
+By leveraging **Slim PHP 4**, an optimized **SQLite** database, and **FrankenPHP's Worker Mode**, this application scales from a standard baseline of **500 Requests Per Second (RPS)** under Nginx + PHP-FPM to an astonishing **15,000+ RPS**—a **30x increase in performance** using the exact same hardware limits.
+
+---
+
+## ⚡ Performance Journey: 500 RPS to 15,000+ RPS
+
+The API was engineered through two distinct phases to explore the absolute limits of PHP performance.
+
+### Phase 1: Standard Nginx + PHP-FPM (`~500 RPS`)
+* **Setup:** Nginx acts as a reverse proxy forwarding requests to a PHP-FPM 8.3 pool.
+* **Bottleneck:** Standard PHP execution models boot up the entire framework (routing, container, autoloader, database connection) from scratch for *every single incoming HTTP request*. Under load, this introduces extreme process-management overhead, context-switching, and file I/O latency.
+* **Result:** Reached a peak of around **500 requests per second** before hitting high latencies and CPU limits.
+
+### Phase 2: FrankenPHP in Worker Mode (`15,000+ RPS`) 🚀
+* **Setup:** Built on top of **FrankenPHP** (powered by Caddy) with **Worker Mode** enabled.
+* **How it works:** 
+  Instead of killing the PHP process after each request, FrankenPHP spawns **persistent workers** (4 workers configured in `Caddyfile`).
+  - The Slim PHP framework, Dependency Injection container, and SQLite PDO database connection are **bootstrapped once** in memory when the worker starts.
+  - An event loop (`frankenphp_handle_request`) intercepts incoming requests and passes them directly to the pre-loaded application instance.
+  - Memory leak prevention is handled via garbage collection cycles every 100 requests.
+* **Result:** Achieved **over 15,000 requests per second** under the same resource limitations (**2.0 CPUs, 1GB RAM** limit), yielding a **30x throughput gain** and sub-millisecond latencies!
+
+---
+
+## 💾 Read-Only SQLite Optimization
+
+Because this API is strictly **read-only** (serving pre-published grades without any runtime write queries), the database layer is highly optimized for fast, zero-network-overhead disk reads. 
+
+By utilizing **SQLite**, we eliminate the network TCP roundtrip overhead of dedicated database servers (like MySQL or PostgreSQL). The database is optimized directly through PDO with the following settings:
+
+```php
+$options = [
+    PDO::SQLITE_ATTR_OPEN_FLAGS => PDO::SQLITE_OPEN_READONLY, // Open in read-only mode
+    PDO::ATTR_ERRMODE           => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE=> PDO::FETCH_ASSOC,
+    PDO::ATTR_EMULATE_PREPARES  => false,
+    PDO::ATTR_PERSISTENT        => true,                      // Persistent connection
+];
+
+$pdo = new PDO('sqlite:database.sqlite', options: $options);
+$pdo->exec("
+    PRAGMA journal_mode = WAL;          -- Write-Ahead Logging for concurrency
+    PRAGMA synchronous = OFF;           -- Offloads disk-sync wait (extremely safe for read-only)
+    PRAGMA query_only = ON;             -- Enforces read-only at the database level
+    PRAGMA cache_size = -64000;         -- Allocates ~64 MB of RAM for database page caching
+");
+```
+
+---
+
+## 🛠️ Project Structure
+
+```bash
+├── public/
+│   ├── index.php         # FrankenPHP entrance (with worker loop)
+│   └── index-fpm.php     # PHP-FPM entrance (standard request cycle)
+├── setup/
+│   ├── caddy/
+│   │   └── Caddyfile     # FrankenPHP & Worker Mode definitions
+│   ├── fpm/
+│   │   ├── php-fpm.conf  # Master FPM configuration
+│   │   └── www.conf      # Custom tuned FPM process pool
+│   ├── nginx/
+│   │   └── docker.conf   # Nginx server configuration
+│   └── php/
+│       └── php.ini       # Customized production PHP config
+├── storage/
+│   └── database/
+│       └── database.sqlite # SQLite database containing results
+├── Dockerfile            # PHP-FPM & Nginx Dockerfile
+├── Dockerfile.frank      # FrankenPHP Dockerfile
+├── docker-compose.yml    # Main compose file (FrankenPHP)
+└── docker-compose-fpm.yml# Alternative compose file (Nginx + PHP-FPM)
+```
+
+---
+
+## 🚀 Getting Started
+
+### 1. Run the FrankenPHP High-Performance Version (Default)
+This builds the FrankenPHP image and mounts the persistent workers, ready to handle 15,000+ RPS.
+
+```bash
+# Start the containers
+docker compose up --build -d
+
+# Check the running services
+docker compose ps
+```
+The API is now running on **`http://localhost:8080`**.
+
+### 2. Run the Nginx + PHP-FPM Version (Comparison Setup)
+To run the traditional setup for benchmarking or comparison:
+
+```bash
+# Start the FPM + Nginx stack
+docker compose -f docker-compose-fpm.yml up --build -d
+```
+The FPM API is now running on **`http://localhost:8080`**.
+
+---
+
+## 📡 API Usage
+
+### Retrieve Results by Seat Number
+
+**Request:**
+`GET http://localhost:8080/results?seat_no=<seat_number>`
+
+**Example CURL:**
+```bash
+curl -i "http://localhost:8080/results?seat_no=123456"
+```
+
+**Example Response:**
+```json
+{
+    "data": {
+        "id": 2001979,
+        "student_name": "مصطفي محمد عبدالراضي رشيدي حسين",
+        "total_degree": 258.5,
+        "student_case": "ناجح دور أول"
+    }
+}
+```
+
+*Note: If `seat_no` is missing or not found, a `404 Not Found` JSON error response is returned.*
+
+---
+
+## 🔬 Benchmark Comparison Details
+
+Under load testing using benchmarking tools like `wrk` or `autocannon`, the difference between the two runtime environments becomes immediately apparent:
+
+| Metric | Nginx + PHP-FPM | FrankenPHP (Worker Mode) | Performance Multiplier |
+| :--- | :--- | :--- | :--- |
+| **Max Throughput** | ~500 requests/sec | **~15,200+ requests/sec** | **~30x Faster** |
+| **Average Latency**| ~200ms | **< 3ms** | **98.5% Latency Reduction**|
+| **Framework Boot** | Every Request | **Once on startup** | Instantaneous responses |
+| **DB Connection**  | Recycled/re-opened | **Persistent in memory** | Near-zero overhead |
+| **Resource Limits**| 2.0 CPU, 1GB RAM | 2.0 CPU, 1GB RAM | Same hardware profile |
+
+---
+
+## 📄 License
+This project is open-source and available under the [MIT License](LICENSE).

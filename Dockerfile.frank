@@ -1,0 +1,29 @@
+# Dockerfile
+FROM dunglas/frankenphp:latest-php8.3-alpine
+
+# Install essential system extensions if your Slim app needs them (e.g., pdo_mysql, opcache)
+RUN install-php-extensions opcache pdo_mysql pcntl
+
+# Set working directory inside the container
+WORKDIR /var/www/html
+
+# Copy dependency configuration files first to exploit Docker layer caching
+COPY composer.json composer.lock ./
+
+# Install dependencies using Composer built right into FrankenPHP image
+# RUN composer install
+
+# Copy the rest of your application code
+COPY . .
+
+# Set environment variables for production optimization
+ENV PHP_INI_SCAN_DIR="/usr/local/etc/php/conf.d"
+ENV FRANKENPHP_CONFIG="worker /var/www/html/public/index.php"
+
+# Inform FrankenPHP to look for our custom Caddy file configuration
+COPY setup/caddy/Caddyfile /etc/frankenphp/Caddyfile
+
+# Ensure correct permissions for the webroot directory
+RUN chown -R www-data:www-data /var/www/html
+
+USER www-data
