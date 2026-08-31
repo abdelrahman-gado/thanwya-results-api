@@ -1,4 +1,6 @@
-vendor
+./vendor
 .vscode
 .qodo
-
+vendor
+vendor/*
+/vendor

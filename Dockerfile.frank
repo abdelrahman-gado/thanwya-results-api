@@ -4,6 +4,12 @@ FROM dunglas/frankenphp:latest-php8.3-alpine
 # Install essential system extensions if your Slim app needs them (e.g., pdo_mysql, opcache)
 RUN install-php-extensions opcache pdo_mysql pcntl
 
+# Install git and zip/unzip via Alpine's package manager
+RUN apk add --no-cache git zip unzip
+
+# Copy composer from the official image
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
 # Set working directory inside the container
 WORKDIR /var/www/html
 
@@ -11,7 +17,7 @@ WORKDIR /var/www/html
 COPY composer.json composer.lock ./
 
 # Install dependencies using Composer built right into FrankenPHP image
-# RUN composer install
+RUN composer install
 
 # Copy the rest of your application code
 COPY . .
