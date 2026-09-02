@@ -134,15 +134,85 @@ curl -i "http://localhost:8080/results?seat_no=123456"
 
 ## 🔬 Benchmark Comparison Details
 
-Under load testing using benchmarking tools like `wrk` or `autocannon`, the difference between the two runtime environments becomes immediately apparent:
+We performed stress-testing using `wrk` with **12 threads and 400 concurrent connections over 30 seconds**, using a custom Lua script to simulate realistic query traffic (`benchmark.lua`):
 
-| Metric | Nginx + PHP-FPM | FrankenPHP (Worker Mode) | Performance Multiplier |
+```bash
+wrk -t12 -c400 -d30s -s benchmark.lua http://localhost:8080
+```
+
+### 📊 Performance Summary (400 Concurrent Connections)
+
+| Metric | Traditional Nginx + PHP-FPM | FrankenPHP (Worker Mode) 🚀 | Performance Multiplier |
 | :--- | :--- | :--- | :--- |
-| **Max Throughput** | ~500 requests/sec | **~15,200+ requests/sec** | **~30x Faster** |
-| **Average Latency**| ~200ms | **< 3ms** | **98.5% Latency Reduction**|
-| **Framework Boot** | Every Request | **Once on startup** | Instantaneous responses |
-| **DB Connection**  | Recycled/re-opened | **Persistent in memory** | Near-zero overhead |
-| **Resource Limits**| 2.0 CPU, 1GB RAM | 2.0 CPU, 1GB RAM | Same hardware profile |
+| **Throughput (RPS)** | **198.00** requests/sec | **16,066.99** requests/sec | **81.1x Faster** |
+| **Total Requests (30s)** | 5,952 | **482,745** | **81.1x more requests handled** |
+| **Avg Latency** | 899.73 ms | **58.06 ms** | **93.5% Latency Reduction** |
+| **Max Latency** | 2.00 s (timeout threshold) | **1.07 s** | - |
+| **50% Latency (Median)** | 854.16 ms | **21.85 ms** | **97.4% Latency Reduction** |
+| **90% Latency** | 1.74 s | **36.60 ms** | **97.9% Latency Reduction** |
+| **Socket Timeouts** | 2,668 (44.8% of requests) | **6 (0.001% of requests)** | **99.7% Timeout Reduction** |
+| **Total Transfer** | 2.59 MB | **81.95 MB** | - |
+
+---
+
+### 📝 Detailed Raw Benchmark Logs
+
+<details>
+<summary><b>Click to expand Nginx + PHP-FPM wrk Output</b></summary>
+
+```text
+Running 30s test @ http://localhost:8080
+  12 threads and 400 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   899.73ms  513.12ms   2.00s    58.59%
+    Req/Sec    26.74     35.61   230.00     89.50%
+  Latency Distribution
+     50%  854.16ms
+     75%    1.33s 
+     90%    1.74s 
+     99%    1.92s 
+  5952 requests in 30.06s, 2.59MB read
+  Socket errors: connect 0, read 0, write 0, timeout 2668
+Requests/sec:    198.00
+Transfer/sec:     88.28KB
+```
+
+</details>
+
+<details>
+<summary><b>Click to expand FrankenPHP (Worker Mode) wrk Output</b></summary>
+
+```text
+Running 30s test @ http://localhost:8080
+  12 threads and 400 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    58.06ms  148.39ms   1.07s    94.20%
+    Req/Sec     1.35k   178.05     1.77k    75.03%
+  Latency Distribution
+     50%   21.85ms
+     75%   25.30ms
+     90%   36.60ms
+     99%  882.73ms
+  482745 requests in 30.05s, 81.95MB read
+  Socket errors: connect 0, read 0, write 0, timeout 6
+Requests/sec:  16066.99
+Transfer/sec:      2.73MB
+```
+
+</details>
+
+---
+
+### 🔍 Bottleneck Analysis & Explanation
+
+Under a high concurrency load of **400 connections**, the performance gap grows to a mind-blowing **81x**. Here is why:
+
+1. **Worker Pool & Queuing Exhaustion (PHP-FPM):**
+   In standard PHP-FPM, each incoming request requires a dedicated PHP process. Because our concurrent connections (400) far exceed the FPM process pool capacity, incoming requests are queued. This queuing delay adds massive latency before the script even executes, leading to **2,668 timeouts** (45% of total requests) as requests hit `wrk`'s default 2-second timeout.
+2. **Bootstrapping Overhead (PHP-FPM):**
+   The FPM workers that do process requests must bootstrap the Slim framework, set up dependency injection, read configuration files, and re-establish a PDO SQLite database connection on *every single request*. This prevents FPM from scaling past **~198 RPS** under high stress.
+3. **Persisted Workers & Event Loop (FrankenPHP):**
+   In FrankenPHP's Worker Mode, persistent workers are spawned once on start. The framework, routing, containers, and PDO connections are bootstrapped **once in memory**. The worker loop uses `frankenphp_handle_request()` to intercept HTTP requests from the underlying Caddy engine, bypassing almost all I/O and setup overhead. This allows the system to sustain **16,066.99 RPS** with **sub-60ms average latency** and virtually **zero timeouts (only 6 out of 480k+ requests)** under the exact same system resources!
 
 ---
 
