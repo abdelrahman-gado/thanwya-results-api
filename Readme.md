@@ -109,11 +109,11 @@ The FPM API is now running on **`http://localhost:8080`**.
 ### Retrieve Results by Seat Number
 
 **Request:**
-`GET http://localhost:8080/results?seat_no=<seat_number>`
+`GET http://localhost:8080/api/results?seat_no=<seat_number>`
 
 **Example CURL:**
 ```bash
-curl -i "http://localhost:8080/results?seat_no=123456"
+curl -i "http://localhost:8080/api/results?seat_no=123456"
 ```
 
 **Example Response:**
