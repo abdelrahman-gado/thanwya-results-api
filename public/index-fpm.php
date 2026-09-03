@@ -38,7 +38,7 @@ $app->addRoutingMiddleware();
 
 $errorMiddleware = $app->addErrorMiddleware(false, true, true);
 
-$app->get('/results', function (Request $request, Response $response) use ($container) {
+$app->get('/api/results', function (Request $request, Response $response) use ($container) {
     $queryParams = $request->getQueryParams();
     $seatNumber = $queryParams['seat_no'] ?? null;
     if (!$seatNumber) {
