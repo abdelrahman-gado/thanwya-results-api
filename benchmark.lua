@@ -1,5 +1,5 @@
 -- benchmark.lua
--- Benchmark script for wrk targeting http://localhost:8080/results?seat_no=X
+-- Benchmark script for wrk targeting http://localhost:8080/api/results?seat_no=X
 -- Usage: wrk -t12 -c400 -d30s -s benchmark.lua http://localhost:8080
 
 local thread_id = 0
@@ -26,6 +26,6 @@ end
 request = function()
    -- Generate a random seat number in the specified range
    local seat_no = math.random(2001970, 2993862)
-   local path = "/results?seat_no=" .. seat_no
+   local path = "/api/results?seat_no=" .. seat_no
    return wrk.format("GET", path)
 end
